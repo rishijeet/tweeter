@@ -4,14 +4,14 @@ import re
 
 class InshortsParser:
     def __init__(self, max_news=20):
-        self.base_url = "https://www.inshorts.com/en/read/technology"
+        self.base_url = "https://www.inshorts.com/en/read/startup"
         self.max_news = max_news
         self.session = requests.Session()
         self.session.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'X-Requested-With': 'XMLHttpRequest',
-            'Referer': 'https://www.inshorts.com/en/read/technology'
+            'Referer': 'https://www.inshorts.com/en/read/startup'
         }
 
     def fetch_headlines(self):
@@ -28,7 +28,7 @@ class InshortsParser:
                 else:
                     response = self.session.post(
                         "https://www.inshorts.com/en/ajax/more_news",
-                        data={"category": "technology", "news_offset": news_offset}
+                        data={"category": "startup", "news_offset": news_offset}
                     )
                 
                 response.raise_for_status()
@@ -60,7 +60,7 @@ class InshortsParser:
         return headlines[:self.max_news]
 
 if __name__ == "__main__":
-    print("Fetching latest technology headlines...")
+    print("Fetching latest startup headlines...")
     parser = InshortsParser(max_news=20)
     headlines = parser.fetch_headlines()
     
