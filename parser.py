@@ -1,69 +1,72 @@
 import requests
 from bs4 import BeautifulSoup
+import re
 
-def fetch_inshorts_tech_posts():
-    url = "https://inshorts.com/en/read/technology"
-    
-    # Fetch the page content
-    response = requests.get(url)
-    if response.status_code != 200:
-        print(f"Failed to fetch page: HTTP {response.status_code}")
-        return []
-    
-    soup = BeautifulSoup(response.text, 'html.parser')
-    news_cards = soup.find_all('div', class_='PmX01nT74iM8UNAIENsC')
-    
-    posts = []
-    for item in news_cards[:20]:  # Limit to 20 posts
-        headline = item.find('span', class_='ddVzQcwl2yPlFt4fteIE') or item.find('h2')
-        summary = item.find('div', class_='KkupEonoVHxNv4A_D7UG') or item.find('div', itemprop='articleBody')
+class InshortsParser:
+    def __init__(self, max_news=20):
+        self.base_url = "https://www.inshorts.com/en/read/technology"
+        self.max_news = max_news
+        self.session = requests.Session()
+        self.session.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': 'https://www.inshorts.com/en/read/technology'
+        }
+
+    def fetch_headlines(self):
+        """Fetch headlines with proper load more simulation"""
+        headlines = []
+        news_offset = None
+        attempt = 0
         
-        posts.append({
-            "headline": headline.text.strip() if headline else "No headline found",
-            "summary": summary.text.strip() if summary else "No summary found"
-        })
-    
-    return posts
-
-def split_text(text, max_length=280):
-    """Split text into chunks of max_length characters."""
-    chunks = []
-    while text:
-        chunk = text[:max_length]
-        chunks.append(chunk)
-        text = text[max_length:]
-    return chunks
-
-def format_for_tweet_thread(post):
-    """Format a post into a thread of tweets."""
-    thread = []
-    thread.append(post['headline'])  # First tweet: headline
-    thread.extend(split_text(post['summary']))  # Split summary into chunks
-    return thread
-
-def main():
-    """Test the parser functions independently."""
-    print("Testing parser.py...\n")
-    
-    # Test fetching posts
-    posts = fetch_inshorts_tech_posts()
-    print(f"Fetched {len(posts)} posts.")
-    
-    if not posts:
-        print("No posts fetched. Check the HTML structure or network.")
-        return
-    
-    # Display the first 3 posts as an example
-    for i, post in enumerate(posts[:3], 1):
-        print(f"\nPost {i}:")
-        print(f"Headline: {post['headline']}")
-        print(f"Summary: {post['summary']}")
-        
-        # Test thread formatting
-        thread = format_for_tweet_thread(post)
-        print(f"\nFormatted Thread (Length: {len(thread)} tweets):")
-        for j, tweet in enumerate(thread, 1):
-            print(f"  Tweet {j}: {tweet[:50]}...")  # Preview first 50 chars
+        while len(headlines) < self.max_news and attempt < 3:
+            try:
+                # First page or subsequent AJAX calls
+                if not news_offset:
+                    response = self.session.get(self.base_url)
+                else:
+                    response = self.session.post(
+                        "https://www.inshorts.com/en/ajax/more_news",
+                        data={"category": "technology", "news_offset": news_offset}
+                    )
+                
+                response.raise_for_status()
+                data = response.json() if news_offset else {'html': response.text}
+                
+                # Parse headlines
+                soup = BeautifulSoup(data['html'], 'html.parser')
+                new_headlines = [
+                    h.text.strip() 
+                    for h in soup.find_all('span', itemprop='headline')
+                    if h and h.text.strip()
+                ]
+                headlines.extend(new_headlines)
+                
+                print(f"Batch {attempt + 1}: Added {len(new_headlines)} headlines (Total: {len(headlines)})")
+                
+                # Update offset for next request
+                script = soup.find('script', string=re.compile('min_news_id'))
+                if script:
+                    match = re.search(r'min_news_id\s*=\s*"(.*?)"', script.string)
+                    news_offset = match.group(1) if match else None
+                
+                attempt += 1
+                
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                break
+                
+        return headlines[:self.max_news]
 
 if __name__ == "__main__":
-    main()
+    print("Fetching latest technology headlines...")
+    parser = InshortsParser(max_news=20)
+    headlines = parser.fetch_headlines()
+    
+    print(f"\nFinal Results ({len(headlines)} headlines):")
+    for idx, headline in enumerate(headlines, 1):
+        print(f"{idx}. {headline}")
+    
+    if len(headlines) < 20:
+        print(f"\nNote: Only {len(headlines)} headlines were available")

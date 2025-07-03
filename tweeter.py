@@ -1,89 +1,35 @@
-import requests
-from bs4 import BeautifulSoup
 import tweepy
 import os
-from dotenv import load_dotenv
 import time
+from dotenv import load_dotenv
+from parser import fetch_inshorts_tech_headlines  # Import the new function
+
 load_dotenv()
 
-def fetch_inshorts_tech_posts():
-    url = "https://inshorts.com/en/read/technology"
-    
-    # Fetch the page content
-    response = requests.get(url)
-    if response.status_code != 200:
-        print(f"Failed to fetch page: HTTP {response.status_code}")
-        return []
-    
-    soup = BeautifulSoup(response.text, 'html.parser')
-    news_cards = soup.find_all('div', class_='PmX01nT74iM8UNAIENsC')
-    
-    posts = []
-    for item in news_cards[:20]:  # Limit to 20 posts
-        headline = item.find('span', class_='ddVzQcwl2yPlFt4fteIE') or item.find('h2')
-        summary = item.find('div', class_='KkupEonoVHxNv4A_D7UG') or item.find('div', itemprop='articleBody')
-        
-        posts.append({
-            "headline": headline.text.strip() if headline else "No headline found",
-            "summary": summary.text.strip() if summary else "No summary found"
-        })
-    
-    return posts
-
-def split_text(text, max_length=280):
-    """Split text into chunks of max_length characters."""
-    chunks = []
-    while text:
-        chunk = text[:max_length]
-        chunks.append(chunk)
-        text = text[max_length:]
-    return chunks
-
-def format_for_tweet_thread(post):
-    """Format a post into a thread of tweets."""
-    thread = []
-    
-    # First tweet: headline only
-    thread.append(post['headline'])
-    
-    # Split summary into chunks for subsequent tweets
-    summary_chunks = split_text(post['summary'])
-    for chunk in summary_chunks:
-        thread.append(chunk)
-    
-    return thread
-
-def tweet_thread(client, thread):
-    """Post a thread of tweets."""
-    previous_tweet_id = None
-    for tweet_text in thread:
+def tweet_headlines(client, headlines):
+    """Tweet each headline as a standalone post."""
+    for i, headline in enumerate(headlines, 1):
         try:
-            tweet = client.create_tweet(
-                text=tweet_text,
-                in_reply_to_tweet_id=previous_tweet_id
-            )
-            previous_tweet_id = tweet.data['id']
-            print(f"Tweeted: {tweet_text}\n{'='*50}")
-            time.sleep(2.5)
+            client.create_tweet(text=headline)
+            print(f"Tweeted {i}: {headline}")
+            time.sleep(2.5)  # Avoid rate limits
         except tweepy.errors.Forbidden as e:
-            print(f"Failed to tweet: {e}")
-            break
+            print(f"Skipped (Twitter blocked): {headline}\nError: {e}")
+            continue
 
 def main():
-    # Initialize Twitter API client
+    # Initialize Twitter Client
     client = tweepy.Client(
         consumer_key=os.getenv("TWITTER_CONSUMER_KEY"),
         consumer_secret=os.getenv("TWITTER_CONSUMER_SECRET"),
         access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
         access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
     )
-
-    posts = fetch_inshorts_tech_posts()
-    print(f"Number of posts fetched: {len(posts)}")
-    for i, post in enumerate(posts, 1):
-        print(f"\nThread for Post {i}:")
-        thread = format_for_tweet_thread(post)
-        tweet_thread(client, thread)
+    
+    # Fetch and tweet headlines
+    headlines = fetch_inshorts_tech_headlines()
+    print(f"Fetched {len(headlines)} headlines. Starting to tweet...")
+    tweet_headlines(client, headlines)
 
 if __name__ == "__main__":
     main()
