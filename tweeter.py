@@ -1,11 +1,20 @@
 import tweepy
 import os
 import time
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
-from parser import InshortsParser  # Make sure parser.py is in same directory
+from parser import InshortsParser
 
-load_dotenv()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Log to console
+    ]
+)
+logger = logging.getLogger(__name__)
 
 class SummaryTweeter:
     def __init__(self):
@@ -16,55 +25,46 @@ class SummaryTweeter:
             access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
         )
         self.parser = InshortsParser(max_news=20)
-        self.log_file = "tweet_log.txt"
-
-    def _log_tweet(self, status, summary, tweet_num, total):
-        """Log each tweet attempt with timestamp"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = (
-            f"[{timestamp}] Tweet {tweet_num}/{total} - {status}\n"
-            f"Content: {summary[:100]}...\n"
-            f"{'-'*50}\n"
-        )
-        with open(self.log_file, "a") as f:
-            f.write(log_entry)
-        print(log_entry)
 
     def tweet_summaries(self):
-        """Tweet summaries with delays and logging"""
+        """Tweet summaries with delays and proper logging"""
         try:
             summaries = self.parser.fetch_summaries()
             total = len(summaries)
-            print(f"Starting tweet sequence for {total} summaries")
+            logger.info(f"Starting tweet sequence for {total} summaries")
             
             for idx, summary in enumerate(summaries, 1):
                 tweet_text = summary[:277] + "..." if len(summary) > 280 else summary
                 
                 try:
-                    # Tweet and log success
-                    self.client.create_tweet(text=tweet_text)
-                    self._log_tweet("SUCCESS", tweet_text, idx, total)
+                    # Send tweet
+                    result = self.client.create_tweet(text=tweet_text)
+                    tweet_id = result.data['id']
                     
-                    # Wait 10 seconds unless it's the last tweet
+                    logger.info(
+                        f"Tweet {idx}/{total} SUCCESS | "
+                        f"ID: {tweet_id} | "
+                        f"Content: {tweet_text[:50]}..."
+                    )
+                    
+                    # 10-second delay unless last tweet
                     if idx < total:
                         time.sleep(10)
                         
                 except tweepy.errors.Forbidden as e:
-                    self._log_tweet(f"BLOCKED - {str(e)}", tweet_text, idx, total)
+                    logger.warning(f"Tweet {idx}/{total} BLOCKED - {str(e)}")
                 except tweepy.errors.TooManyRequests:
-                    self._log_tweet("RATE LIMITED - Waiting 15 minutes", tweet_text, idx, total)
-                    time.sleep(5)
+                    logger.warning("Rate limit hit - waiting 15 minutes")
+                    time.sleep(15 * 60)
                 except Exception as e:
-                    self._log_tweet(f"ERROR - {str(e)}", tweet_text, idx, total)
+                    logger.error(f"Tweet {idx}/{total} FAILED - {str(e)}")
                     
         except Exception as e:
-            error_msg = f"Critical failure: {str(e)}"
-            print(error_msg)
-            with open(self.log_file, "a") as f:
-                f.write(error_msg)
+            logger.critical(f"Fatal error in tweet sequence: {str(e)}")
+            raise
 
 if __name__ == "__main__":
-    print("Starting Twitter bot with 10-second delays")
+    logger.info("Starting Twitter bot with 10-second delays")
     bot = SummaryTweeter()
     bot.tweet_summaries()
-    print("Tweet sequence completed. Check tweet_log.txt for details")
+    logger.info("Tweet sequence completed successfully")
