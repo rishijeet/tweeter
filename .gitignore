@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+venv/
+.env
+*.env
+.env.local
+
+# Virtual environment
+.venv/
+env/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Twitter API keys (critical to ignore!)
+secrets.py
+config.py
+credentials.json
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# pytest cache
+.pytest_cache/

@@ -1,10 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import tweepy
-import os
-from dotenv import load_dotenv
-import time
-load_dotenv()
 
 def fetch_inshorts_tech_posts():
     url = "https://inshorts.com/en/read/technology"
@@ -42,48 +37,33 @@ def split_text(text, max_length=280):
 def format_for_tweet_thread(post):
     """Format a post into a thread of tweets."""
     thread = []
-    
-    # First tweet: headline only
-    thread.append(post['headline'])
-    
-    # Split summary into chunks for subsequent tweets
-    summary_chunks = split_text(post['summary'])
-    for chunk in summary_chunks:
-        thread.append(chunk)
-    
+    thread.append(post['headline'])  # First tweet: headline
+    thread.extend(split_text(post['summary']))  # Split summary into chunks
     return thread
 
-def tweet_thread(client, thread):
-    """Post a thread of tweets."""
-    previous_tweet_id = None
-    for tweet_text in thread:
-        try:
-            tweet = client.create_tweet(
-                text=tweet_text,
-                in_reply_to_tweet_id=previous_tweet_id
-            )
-            previous_tweet_id = tweet.data['id']
-            print(f"Tweeted: {tweet_text}\n{'='*50}")
-            time.sleep(2.5)
-        except tweepy.errors.Forbidden as e:
-            print(f"Failed to tweet: {e}")
-            break
-
 def main():
-    # Initialize Twitter API client
-    client = tweepy.Client(
-        consumer_key=os.getenv("TWITTER_CONSUMER_KEY"),
-        consumer_secret=os.getenv("TWITTER_CONSUMER_SECRET"),
-        access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
-        access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
-    )
-
+    """Test the parser functions independently."""
+    print("Testing parser.py...\n")
+    
+    # Test fetching posts
     posts = fetch_inshorts_tech_posts()
-    print(f"Number of posts fetched: {len(posts)}")
-    for i, post in enumerate(posts, 1):
-        print(f"\nThread for Post {i}:")
+    print(f"Fetched {len(posts)} posts.")
+    
+    if not posts:
+        print("No posts fetched. Check the HTML structure or network.")
+        return
+    
+    # Display the first 3 posts as an example
+    for i, post in enumerate(posts[:3], 1):
+        print(f"\nPost {i}:")
+        print(f"Headline: {post['headline']}")
+        print(f"Summary: {post['summary']}")
+        
+        # Test thread formatting
         thread = format_for_tweet_thread(post)
-        tweet_thread(client, thread)
+        print(f"\nFormatted Thread (Length: {len(thread)} tweets):")
+        for j, tweet in enumerate(thread, 1):
+            print(f"  Tweet {j}: {tweet[:50]}...")  # Preview first 50 chars
 
 if __name__ == "__main__":
     main()
