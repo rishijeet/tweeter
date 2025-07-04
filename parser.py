@@ -1,3 +1,8 @@
+"""
+Inshorts Parser - Fetches and formats headlines/summaries from Inshorts.
+Author: Rishijeet Mishra
+"""
+
 import requests
 from bs4 import BeautifulSoup
 import re

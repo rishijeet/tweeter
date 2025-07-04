@@ -1,3 +1,8 @@
+"""
+Inshorts Headline Tweeter - Tweets fetched headlines from Inshorts.
+Author: Rishijeet Mishra
+"""
+
 import tweepy
 import os
 import time
