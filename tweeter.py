@@ -2,7 +2,6 @@ import tweepy
 import os
 import time
 import logging
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from parser import InshortsParser
 
@@ -14,9 +13,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class SummaryTweeter:
+class HeadlineTweeter:
     def __init__(self):
-        load_dotenv()  # Load env first
+        load_dotenv()  # Load environment variables
         self._validate_credentials()
         self.client = tweepy.Client(
             consumer_key=os.getenv("TWITTER_CONSUMER_KEY"),
@@ -25,71 +24,42 @@ class SummaryTweeter:
             access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
         )
         self.parser = InshortsParser(max_news=20)
-        self.rate_limit_reset = None
 
     def _validate_credentials(self):
-        """Validate all required credentials exist"""
-        required = [
+        """Ensure all required Twitter API credentials are set."""
+        required_keys = [
             "TWITTER_CONSUMER_KEY",
             "TWITTER_CONSUMER_SECRET",
-            "TWITTER_ACCESS_TOKEN", 
+            "TWITTER_ACCESS_TOKEN",
             "TWITTER_ACCESS_TOKEN_SECRET"
         ]
-        missing = [var for var in required if not os.getenv(var)]
+        missing = [key for key in required_keys if not os.getenv(key)]
         if missing:
-            raise ValueError(f"Missing credentials: {', '.join(missing)}")
+            raise ValueError(f"Missing Twitter API credentials: {', '.join(missing)}")
 
-    def tweet_summaries(self):
-        """Main tweeting method with rate limit handling"""
-        try:
-            summaries = self.parser.fetch_summaries()
-            logger.info(f"Starting tweet sequence for {len(summaries)} summaries")
-            
-            for idx, summary in enumerate(summaries, 1):
-                while True:  # Retry loop
-                    try:
-                        self._tweet_single(summary, idx, len(summaries))
-                        time.sleep(15)  # 15-second buffer between tweets
-                        break
-                        
-                    except tweepy.errors.TooManyRequests as e:
-                        self._handle_rate_limit(e)
-                    except Exception as e:
-                        logger.error(f"Tweet {idx} failed: {str(e)}")
-                        break
-                        
-        except Exception as e:
-            logger.critical(f"Tweet sequence aborted: {str(e)}")
-        finally:
-            logger.info("Tweet sequence completed")
+    def tweet_headlines(self):
+        """Fetch headlines and tweet them one by one with a 2-second delay."""
+        headlines = self.parser.fetch_content(content_type='headline')
+        if not headlines:
+            logger.error("No headlines fetched. Exiting.")
+            return
 
-    def _tweet_single(self, summary, idx, total):
-        """Handle single tweet attempt"""
-        tweet_text = summary[:277] + "..." if len(summary) > 280 else summary
-        response = self.client.create_tweet(text=tweet_text)
-        logger.info(
-            f"Tweet {idx}/{total} posted | "
-            f"ID: {response.data['id']} | "
-            f"Content: {tweet_text[:50]}..."
-        )
-
-    def _handle_rate_limit(self, error):
-        """Calculate and wait for rate limit reset"""
-        reset_time = datetime.fromtimestamp(int(error.response.headers.get('x-rate-limit-reset', 0)))
-        wait_seconds = max(0, (reset_time - datetime.now()).total_seconds() + 10)  # 10-second buffer
-        
-        logger.warning(
-            f"Rate limit exceeded. Waiting {wait_seconds//60} minutes "
-            f"(until {reset_time.strftime('%H:%M:%S')})"
-        )
-        
-        time.sleep(wait_seconds)
-        logger.info("Resuming tweet sequence")
+        logger.info(f"Fetched {len(headlines)} headlines. Starting to tweet...")
+        for idx, headline in enumerate(headlines, 1):
+            try:
+                response = self.client.create_tweet(text=headline)
+                logger.info(f"Tweeted headline {idx}/{len(headlines)}: {headline[:50]}...")
+                time.sleep(2)  # 2-second delay between tweets
+            except tweepy.errors.Forbidden as e:
+                logger.error(f"Skipping tweet (blocked by Twitter): {str(e)}")
+                continue
+            except Exception as e:
+                logger.error(f"Failed to tweet: {str(e)}")
+                break
 
 if __name__ == "__main__":
     try:
-        logger.info("Starting Twitter bot with rate limit protection")
-        bot = SummaryTweeter()
-        bot.tweet_summaries()
+        tweeter = HeadlineTweeter()
+        tweeter.tweet_headlines()
     except Exception as e:
-        logger.critical(f"Application failed to start: {str(e)}")
+        logger.error(f"Script failed: {str(e)}")
